@@ -66,59 +66,74 @@ blocks:
             - |
               python3 - << 'EOF'
               import os
-              import subprocess
               import glob
+              import asyncio
 
-              torrents = glob.glob("torrents/*.torrent")
-              if not torrents:
-                  print("⚠️ No torrent files found to download.")
-              else:
-                  os.makedirs("downloads", exist_ok=True)
+              async def download_torrent(torrent_file, sem, max_retries=3):
                   trackers = "udp://tracker.openbittorrent.com:80/announce,udp://tracker.opentrackr.org:1337/announce,udp://tracker.torrent.eu.org:451/announce,udp://exodus.desync.com:6969/announce"
                   
-                  # We will loop through and handle retries/timeouts by re-adding files that fail or timeout
-                  max_retries = 3
-                  active_torrents = list(torrents)
-                  finished_downloads = []
-
-                  for torrent in active_torrents:
-                      success = False
+                  # The semaphore ensures we don't exceed the concurrency limit
+                  async with sem:
                       for attempt in range(1, max_retries + 1):
-                          print(f"📥 Downloading ({attempt}/{max_retries}): {torrent}")
+                          print(f"📥 [Attempt {attempt}/{max_retries}] Starting: {torrent_file}")
                           cmd = [
                               "aria2c",
+                              "--console-log-level=warn", # Keeps console clean since multiple are running
+                              "--summary-interval=0",
                               "--dir=downloads",
                               "--seed-time=0",
-                              "--max-concurrent-downloads=8",
                               "--bt-stop-timeout=60",
                               "--timeout=60",
                               "--enable-dht=true",
                               "--enable-peer-exchange=true",
                               "--follow-torrent=mem",
                               f"--bt-tracker={trackers}",
-                              torrent
+                              torrent_file
                           ]
                           
-                          res = subprocess.run(cmd)
-                          if res.returncode == 0:
-                              success = True
-                              break
+                          # Run the process asynchronously
+                          proc = await asyncio.create_subprocess_exec(*cmd)
+                          await proc.communicate() # Wait for this specific process to finish
+                          
+                          if proc.returncode == 0:
+                              print(f"✅ Successfully finished: {torrent_file}")
+                              return torrent_file
                           else:
-                              print(f"⚠️ Timeout or error on {torrent}, cleaning control files and retrying...")
-                              # Remove partial control files (.aria2) to clean and re-add cleanly
-                              control_file = f"downloads/{os.path.basename(torrent)}.aria2"
+                              print(f"⚠️ Timeout/Error on {torrent_file} (Attempt {attempt}). Cleaning control files and re-adding...")
+                              control_file = f"downloads/{os.path.basename(torrent_file)}.aria2"
+                              # Delete the control file so aria2c starts fresh/re-evaluates it
                               if os.path.exists(control_file):
                                   os.remove(control_file)
+                      
+                      print(f"❌ Failed all {max_retries} attempts for: {torrent_file}")
+                      return None
 
-                      if success:
-                          finished_downloads.append(torrent)
+              async def main():
+                  torrents = glob.glob("torrents/*.torrent")
+                  if not torrents:
+                      print("⚠️ No torrent files found to download.")
+                      return
 
+                  os.makedirs("downloads", exist_ok=True)
+                  
+                  # Limit to 8 concurrent downloads at a exact same time
+                  sem = asyncio.Semaphore(8)
+                  
+                  # Gather all tasks to run concurrently
+                  tasks = [download_torrent(t, sem) for t in torrents]
+                  results = await asyncio.gather(*tasks)
+                  
+                  # Filter out the None results to get only successful downloads
+                  finished = [r for r in results if r]
+                  
                   print("\n====================")
                   print("🎉 FINISHED DOWNLOADS:")
                   print("====================")
-                  for item in finished_downloads:
+                  for item in finished:
                       print(f"✅ {item}")
                   print("====================\n")
+
+              asyncio.run(main())
               EOF
             
             - echo "📦 Running Smart Auto-Group Zipping & Splitting..."
