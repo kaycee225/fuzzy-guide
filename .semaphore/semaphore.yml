@@ -90,7 +90,7 @@ blocks:
                               "--dir=downloads",
                               "--seed-time=0",
                               "--max-concurrent-downloads=8",
-                              "--bt-stop-timeout=600",
+                              "--bt-stop-timeout=60",
                               "--timeout=60",
                               "--enable-dht=true",
                               "--enable-peer-exchange=true",
