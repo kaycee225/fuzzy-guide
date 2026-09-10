@@ -62,18 +62,64 @@ blocks:
               asyncio.run(main())
               EOF
 
-            - echo "🚀 Starting aria2c download with enhanced trackers and DHT..."
+            - echo "🚀 Starting concurrent aria2c downloads with timeout handling & completion tracker..."
             - |
-              find torrents -name "*.torrent" -exec aria2c \
-                --dir="downloads" \
-                --seed-time=0 \
-                --max-concurrent-downloads=10 \
-                --bt-stop-timeout=1000 \
-                --enable-dht=true \
-                --enable-peer-exchange=true \
-                --follow-torrent=mem \
-                --bt-tracker="udp://tracker.openbittorrent.com:80/announce,udp://tracker.opentrackr.org:1337/announce,udp://tracker.torrent.eu.org:451/announce,udp://exodus.desync.com:6969/announce" \
-                --torrent-file={} \; || true
+              python3 - << 'EOF'
+              import os
+              import subprocess
+              import glob
+
+              torrents = glob.glob("torrents/*.torrent")
+              if not torrents:
+                  print("⚠️ No torrent files found to download.")
+              else:
+                  os.makedirs("downloads", exist_ok=True)
+                  trackers = "udp://tracker.openbittorrent.com:80/announce,udp://tracker.opentrackr.org:1337/announce,udp://tracker.torrent.eu.org:451/announce,udp://exodus.desync.com:6969/announce"
+                  
+                  # We will loop through and handle retries/timeouts by re-adding files that fail or timeout
+                  max_retries = 3
+                  active_torrents = list(torrents)
+                  finished_downloads = []
+
+                  for torrent in active_torrents:
+                      success = False
+                      for attempt in range(1, max_retries + 1):
+                          print(f"📥 Downloading ({attempt}/{max_retries}): {torrent}")
+                          cmd = [
+                              "aria2c",
+                              "--dir=downloads",
+                              "--seed-time=0",
+                              "--max-concurrent-downloads=8",
+                              "--bt-stop-timeout=600",
+                              "--timeout=60",
+                              "--enable-dht=true",
+                              "--enable-peer-exchange=true",
+                              "--follow-torrent=mem",
+                              f"--bt-tracker={trackers}",
+                              torrent
+                          ]
+                          
+                          res = subprocess.run(cmd)
+                          if res.returncode == 0:
+                              success = True
+                              break
+                          else:
+                              print(f"⚠️ Timeout or error on {torrent}, cleaning control files and retrying...")
+                              # Remove partial control files (.aria2) to clean and re-add cleanly
+                              control_file = f"downloads/{os.path.basename(torrent)}.aria2"
+                              if os.path.exists(control_file):
+                                  os.remove(control_file)
+
+                      if success:
+                          finished_downloads.append(torrent)
+
+                  print("\n====================")
+                  print("🎉 FINISHED DOWNLOADS:")
+                  print("====================")
+                  for item in finished_downloads:
+                      print(f"✅ {item}")
+                  print("====================\n")
+              EOF
             
             - echo "📦 Running Smart Auto-Group Zipping & Splitting..."
             - |
