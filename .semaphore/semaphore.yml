@@ -67,8 +67,8 @@ blocks:
               find torrents -name "*.torrent" -exec aria2c \
                 --dir="downloads" \
                 --seed-time=0 \
-                --max-concurrent-downloads=5 \
-                --bt-stop-timeout=600 \
+                --max-concurrent-downloads=10 \
+                --bt-stop-timeout=1000 \
                 --enable-dht=true \
                 --enable-peer-exchange=true \
                 --follow-torrent=mem \
