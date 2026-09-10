@@ -41,7 +41,7 @@ blocks:
                           link = link.strip()
                           if link and not link.startswith('#') and not link.endswith(' NO'):
                               if link.startswith('magnet:'):
-                                  print(f"📥 Converting magnet using magnet2torrent: {link[:50]}...")
+                                  print(f"📥 Converting magnet using magnet2torrent: {link[:50]}...", flush=True)
                                   try:
                                       m2t = Magnet2Torrent(link)
                                       filename, torrent_data = await m2t.retrieve_torrent()
@@ -62,8 +62,19 @@ blocks:
               asyncio.run(main())
               EOF
 
-            - echo "🚀 Starting aria2c download..."
-            - find torrents -name "*.torrent" -exec aria2c --dir="downloads" --seed-time=0 --max-concurrent-downloads=5 --bt-stop-timeout=600 --torrent-file={} \; || true
+            - echo "🚀 Starting aria2c download with enhanced trackers and DHT..."
+            - |
+              find torrents -name "*.torrent" -exec aria2c \
+                --dir="downloads" \
+                --seed-time=0 \
+                --max-concurrent-downloads=5 \
+                --bt-stop-timeout=600 \
+                --enable-dht=true \
+                --dht-entry-point-ipv4="dht.transmissionbt.com:6881" \
+                --enable-peer-exchange=true \
+                --follow-torrent=mem \
+                --bt-tracker="udp://tracker.openbittorrent.com:80/announce,udp://tracker.opentrackr.org:1337/announce,udp://tracker.torrent.eu.org:451/announce,udp://exodus.desync.com:6969/announce" \
+                --torrent-file={} \; || true
             
             - echo "📦 Running Smart Auto-Group Zipping & Splitting..."
             - |
