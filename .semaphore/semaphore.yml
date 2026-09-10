@@ -70,7 +70,6 @@ blocks:
                 --max-concurrent-downloads=5 \
                 --bt-stop-timeout=600 \
                 --enable-dht=true \
-                --dht-entry-point-ipv4="dht.transmissionbt.com:6881" \
                 --enable-peer-exchange=true \
                 --follow-torrent=mem \
                 --bt-tracker="udp://tracker.openbittorrent.com:80/announce,udp://tracker.opentrackr.org:1337/announce,udp://tracker.torrent.eu.org:451/announce,udp://exodus.desync.com:6969/announce" \
