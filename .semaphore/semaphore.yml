@@ -12,8 +12,8 @@ blocks:
     task:
       jobs:
         - name: Download, Zip and Upload Files
-           execution_time_limit:
-           hours: 4
+          execution_time_limit:
+            hours: 4
           commands:
             - checkout
             - echo "📦 Installing dependencies (7-zip, aria2, Python3)..."
