@@ -87,7 +87,7 @@ blocks:
               import glob
               import asyncio
 
-              async def download_target(target, sem, max_retries=3):
+              async def download_target(target, sem, max_retries=5):
                   trackers = "udp://tracker.openbittorrent.com:80/announce,udp://tracker.opentrackr.org:1337/announce,udp://tracker.torrent.eu.org:451/announce,udp://exodus.desync.com:6969/announce"
                   
                   async with sem:
