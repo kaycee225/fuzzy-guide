@@ -10,6 +10,8 @@ agent:
 blocks:
   - name: Download, Zip & Upload
     task:
+      execution_time_limit:
+        hours: 4
       jobs:
         - name: Download, Zip and Upload Files
           commands:
