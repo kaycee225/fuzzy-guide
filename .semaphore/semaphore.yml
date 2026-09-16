@@ -24,7 +24,7 @@ blocks:
             - echo "🧲 Processing links (Converting magnets & Queuing direct links)..."
             - mkdir -p downloads torrents 
             - |
-              python3 - << 'EOF'
+              python3 -u - << 'EOF'
               import asyncio
               import os
               import requests
