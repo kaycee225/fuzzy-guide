@@ -24,7 +24,7 @@ blocks:
             - echo "🧲 Processing links (Converting magnets & Queuing direct links)..."
             - mkdir -p downloads torrents 
             - |
-              python3 -u - << 'EOF'
+              python3 - << 'EOF'
               import asyncio
               import os
               import requests
@@ -82,7 +82,7 @@ blocks:
 
             - echo "🚀 Starting concurrent aria2c downloads with active-download timeout protection..."
             - |
-              python3 - << 'EOF'
+              python3 -u - << 'EOF'
               import os
               import glob
               import asyncio
