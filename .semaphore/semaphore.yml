@@ -1,4 +1,4 @@
-version: v1.0
+Version: v1.0
 
 name: Download Torrent and Upload to Filemirage
 
@@ -19,13 +19,14 @@ blocks:
             - sudo apt install -y p7zip-full aria2 python3 python3-requests python3-pip curl
             - pip3 install --break-system-packages magnet2torrent requests
             
-            - echo "🧲 Converting magnets to torrents via magnet2torrent..."
+            - echo "🧲 Processing links (Converting magnets & Queuing direct links)..."
             - mkdir -p downloads torrents 
             - |
               python3 - << 'EOF'
               import asyncio
               import os
               import requests
+              from urllib.parse import urlparse
               from magnet2torrent import Magnet2Torrent, FailedToFetchException
 
               link_url = "https://pink-script-snap.lovable.app/api/public/page/0e01cfaf-128c-477f-bff1-9dee23822d97.txt"
@@ -37,11 +38,13 @@ blocks:
                           print("🛑 Global kill switch active.")
                           return
                           
-                      for link in ks.splitlines():
+                      direct_links = []
+                      
+                      for i, link in enumerate(ks.splitlines()):
                           link = link.strip()
                           if link and not link.startswith('#') and not link.endswith(' NO'):
                               if link.startswith('magnet:'):
-                                  print(f"📥 Converting magnet using magnet2torrent: {link[:50]}...", flush=True)
+                                  print(f"📥 Converting magnet: {link[:50]}...", flush=True)
                                   try:
                                       m2t = Magnet2Torrent(link)
                                       filename, torrent_data = await m2t.retrieve_torrent()
@@ -52,10 +55,23 @@ blocks:
                                   except FailedToFetchException:
                                       print(f"❌ Failed to fetch metadata for magnet link.")
                               elif link.startswith('http'):
-                                  tor_data = requests.get(link).content
-                                  with open('torrents/temp.torrent', 'wb') as tf:
-                                      tf.write(tor_data)
-                                  print("✅ Downloaded direct .torrent file.")
+                                  if link.endswith('.torrent'):
+                                      # Download actual .torrent file
+                                      tor_data = requests.get(link).content
+                                      parsed = urlparse(link)
+                                      filename = os.path.basename(parsed.path) or f"download_{i}.torrent"
+                                      with open(os.path.join('torrents', filename), 'wb') as tf:
+                                          tf.write(tor_data)
+                                      print(f"✅ Downloaded .torrent file: {filename}")
+                                  else:
+                                      # Treat as a direct regular download
+                                      direct_links.append(link)
+                                      print(f"🔗 Queued direct HTTP download: {link}")
+                                      
+                      if direct_links:
+                          with open('direct_links.txt', 'w') as f:
+                              f.write('\n'.join(direct_links))
+                              
                   except Exception as e:
                       print(f"Error processing links: {e}")
 
@@ -69,12 +85,12 @@ blocks:
               import glob
               import asyncio
 
-              async def download_torrent(torrent_file, sem, max_retries=3):
+              async def download_target(target, sem, max_retries=3):
                   trackers = "udp://tracker.openbittorrent.com:80/announce,udp://tracker.opentrackr.org:1337/announce,udp://tracker.torrent.eu.org:451/announce,udp://exodus.desync.com:6969/announce"
                   
                   async with sem:
                       for attempt in range(1, max_retries + 1):
-                          print(f"📥 [Attempt {attempt}/{max_retries}] Starting: {torrent_file}")
+                          print(f"📥 [Attempt {attempt}/{max_retries}] Starting: {target[:80]}")
                           cmd = [
                               "aria2c",
                               "--console-log-level=warn",
@@ -87,33 +103,41 @@ blocks:
                               "--enable-peer-exchange=true",
                               "--follow-torrent=mem",
                               f"--bt-tracker={trackers}",
-                              torrent_file
+                              target
                           ]
                           
                           proc = await asyncio.create_subprocess_exec(*cmd)
                           await proc.communicate()
                           
                           if proc.returncode == 0:
-                              print(f"✅ Successfully finished: {torrent_file}")
-                              return torrent_file
+                              print(f"✅ Successfully finished: {target[:80]}")
+                              return target
                           else:
-                              print(f"⚠️ Timeout/Error on {torrent_file} (Attempt {attempt}). Cleaning control files and re-adding...")
-                              control_file = f"downloads/{os.path.basename(torrent_file)}.aria2"
-                              if os.path.exists(control_file):
-                                  os.remove(control_file)
+                              print(f"⚠️ Timeout/Error on {target[:80]} (Attempt {attempt}).")
+                              # Only try to clean local control files for torrents, not URLs
+                              if os.path.exists(target):
+                                  control_file = f"downloads/{os.path.basename(target)}.aria2"
+                                  if os.path.exists(control_file):
+                                      os.remove(control_file)
                       
-                      print(f"❌ Failed all {max_retries} attempts for: {torrent_file}")
+                      print(f"❌ Failed all {max_retries} attempts for: {target[:80]}")
                       return None
 
               async def main():
-                  torrents = glob.glob("torrents/*.torrent")
-                  if not torrents:
-                      print("⚠️ No torrent files found to download.")
+                  targets = glob.glob("torrents/*.torrent")
+                  
+                  if os.path.exists("direct_links.txt"):
+                      with open("direct_links.txt", "r") as f:
+                          links = [line.strip() for line in f if line.strip()]
+                          targets.extend(links)
+                          
+                  if not targets:
+                      print("⚠️ No torrents or links found to download.")
                       return
 
                   os.makedirs("downloads", exist_ok=True)
                   sem = asyncio.Semaphore(8)
-                  tasks = [download_torrent(t, sem) for t in torrents]
+                  tasks = [download_target(t, sem) for t in targets]
                   results = await asyncio.gather(*tasks)
                   finished = [r for r in results if r]
                   
@@ -121,7 +145,7 @@ blocks:
                   print("🎉 FINISHED DOWNLOADS:")
                   print("====================")
                   for item in finished:
-                      print(f"✅ {item}")
+                      print(f"✅ {item[:80]}")
                   print("====================\n")
 
               asyncio.run(main())
